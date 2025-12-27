@@ -1,5 +1,9 @@
 const fse = require('fs-extra');
-const request = require('request');
+const https = require('https');
+const http = require('http');
+const { pipeline } = require('stream');
+const { promisify } = require('util');
+const streamPipeline = promisify(pipeline);
 const path = require('path');
 const yauzl = require("yauzl");
 
@@ -15,13 +19,29 @@ const destDir = "./generator/fonts";
 // ----------------------------------------------------------------------------
 // Download
 // ----------------------------------------------------------------------------
-function downloadFile(url, dest) {
+function downloadFile(url, dest, maxRedirects = 5) {
     console.log("  Downloading...");
     return new Promise((resolve, reject) => {
-        request(url)
-            .pipe(fse.createWriteStream(dest))
-            .on("close", resolve)
-            .on("error", reject);
+        try {
+            const urlObj = new URL(url);
+            const client = urlObj.protocol === 'https:' ? https : http;
+            const req = client.get(urlObj, res => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location && maxRedirects > 0) {
+                    const next = new URL(res.headers.location, urlObj).toString();
+                    return resolve(downloadFile(next, dest, maxRedirects - 1));
+                }
+                if (res.statusCode !== 200) {
+                    reject(new Error(`Download failed: ${res.statusCode} ${res.statusMessage}`));
+                    return;
+                }
+                streamPipeline(res, fse.createWriteStream(dest))
+                    .then(resolve)
+                    .catch(reject);
+            });
+            req.on('error', reject);
+        } catch (err) {
+            reject(err);
+        }
     });
 }
 
