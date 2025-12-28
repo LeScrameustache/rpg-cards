@@ -675,7 +675,7 @@ function card_element_sr6spell(params, card_data, options) {
 /**
  * @summary A Pathfinder 2nd Edition stat block.
  * @description Displays a Pathfinder 2nd Edition stat block.
- * @example p2e_stats | STR | DEX | CON | INT | WIS | CHA | AC | Fort | Ref | Will | HP
+ * @example p2e_stats | FOR | DEX | CON | INT | SAG | CHA | CA | Vig | Ref | Vol | PV
  * @category Pathfinder 2e
  */
 function card_element_p2e_stats(params, card_data, options) {
@@ -683,7 +683,7 @@ function card_element_p2e_stats(params, card_data, options) {
   result += '<div class="card-p2e-attribute-line">';
   result += '   <p class="card-p2e-attributes-text">';
   result +=
-    "       <b>Str</b> " +
+    "       <b>For</b> " +
     params[0] +
     ", <b>Dex</b> " +
     params[1] +
@@ -691,7 +691,7 @@ function card_element_p2e_stats(params, card_data, options) {
     params[2] +
     ", <b>Int</b> " +
     params[3] +
-    ", <b>Wis</b> " +
+    ", <b>Sag</b> " +
     params[4] +
     ", <b>Cha</b> " +
     params[5];
@@ -701,17 +701,17 @@ function card_element_p2e_stats(params, card_data, options) {
   result += '<div class="card-p2e-attribute-line">';
   result += '   <p class="card-p2e-attributes-text">';
   result +=
-    "       <b>AC </b> " +
+    "       <b>CA </b> " +
     params[6] +
-    "; <b>Fort</b> " +
+    "; <b>Vig</b> " +
     params[7] +
     "; <b>Ref</b> " +
     params[8] +
-    "; <b>Will</b> " +
+    "; <b>Vol</b> " +
     params[9];
   result += "   </p>";
   result += '   <p class="card-p2e-attributes-text">';
-  result += "       <b>HP </b> " + params[10];
+  result += "       <b>PV </b> " + params[10];
   result += "   </p>";
   result += "</div>";
   return result;
