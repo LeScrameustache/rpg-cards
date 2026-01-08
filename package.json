@@ -1,6 +1,6 @@
 {
   "name": "rpg-cards",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "RPG card generator",
   "main": "generator/generate.html",
   "devDependencies": {
@@ -19,7 +19,7 @@
     "type": "git",
     "url": "git+https://github.com/crobi/rpg-cards.git"
   },
-  "author": "Robert Autenrieth",
+  "author": "Robert Autenrieth, Le_Scrameustache",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/crobi/rpg-cards/issues"
