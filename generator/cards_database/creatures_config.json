@@ -1,0 +1,20 @@
+{
+  "page_layouts": {
+    "creatures_cards-sentence_extinction_ch2-1_1x3": {
+      "page_rows": "1",
+      "page_columns": "3",
+      "back_bleed_width": "2mm",
+      "back_bleed_height": "2mm",
+      "page_zoom_width": "100",
+      "page_zoom_height": "100",
+      "page_zoom_keep_ratio": true,
+      "rounded_corners": true,
+      "card_size": "89mm,146mm",
+      "page_size": "210mm,297mm",
+      "page_width": "297mm",
+      "page_height": "210mm",
+      "card_arrangement": "doublesided",
+      "_export_name": "creatures_cards-sentence_extinction_ch2-1_1x3_2026-01-08T23-36-29-868Z"
+    }
+  }
+}
