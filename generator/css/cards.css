@@ -424,6 +424,11 @@
     border-color: #d8c483;
 }
 
+.card-p2e-trait-unique {
+    border-color: #d8c483;
+    background-color: #562bcc;
+}
+
 .card-p2e-trait-alignment {
     background-color: #576294;
     border-color: #d8c483;

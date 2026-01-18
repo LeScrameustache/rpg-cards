@@ -115,6 +115,7 @@ function ui_load_files(evt) {
     const files = target.files;
     const isOpening = Boolean(evt.target.getAttribute('data-opening'));
     const clearAll = Boolean(evt.target.getAttribute('data-clear-all'));
+    const isConfigImport = Boolean(evt.target.getAttribute('data-config'));
     const firstAddedCardIndex = card_data.length;
 
     for (let i = 0; i < files.length; i++) {
@@ -128,20 +129,30 @@ function ui_load_files(evt) {
                 return;
             }
             try {
-                const data = JSON.parse(result);
-                const newData = legacy_card_data(data);
-                if (isOpening && clearAll) {
-                    ui_clear_all(false);
-                }
-                ui_add_cards(newData);
-                if (isOpening) {
-                    getField('file-name').changeValue(f.name.replace(/\.[^/.]+$/, ''));
+                // strip BOM if present
+                const clean = result.replace(/^\uFEFF/, '');
+                const data = JSON.parse(clean);
+                if (isConfigImport) {
+                    // Expecting an object with card_options/app_settings/page_layouts OR a direct layout
+                    apply_config(data, f.name);
                 } else {
-                    ui_select_card_by_index(firstAddedCardIndex);
+                    const newData = legacy_card_data(data);
+                    if (isOpening && clearAll) {
+                        ui_clear_all(false);
+                    }
+                    ui_add_cards(newData);
+                    if (isOpening) {
+                        getField('file-name').changeValue(f.name.replace(/\.[^/.]+$/, ''));
+                    } else {
+                        ui_select_card_by_index(firstAddedCardIndex);
+                    }
                 }
             } catch (err) {
                 console.error(`Error parsing ${f.name}:`, err);
-                showToast(`Error parsing ${f.name}:`, 'danger');
+                showToast(`Error parsing ${f.name}: ${err.message}`, 'danger');
+            } finally {
+                // ensure we clear the special attributes so subsequent loads behave normally
+                $("#file-load").removeAttr('data-config data-opening data-clear-all');
             }
         };
 
@@ -150,6 +161,219 @@ function ui_load_files(evt) {
 
     // Reset file input
     $("#file-load-form")[0].reset();
+}
+
+function ui_save_config() {
+    const configObject = {
+        card_options: card_options,
+        app_settings: app_settings
+    };
+    try {
+        const storedLayouts = localStorage.getItem('page_layouts');
+        if (storedLayouts) configObject.page_layouts = JSON.parse(storedLayouts);
+    } catch (e) {
+        console.error('Error reading page_layouts', e);
+    }
+
+    const jsonString = JSON.stringify(configObject, null, "  ");
+    let filename = (app_settings.file_name || 'rpg_cards') + '_config.json';
+
+    const parts = [jsonString];
+    const blob = new Blob(parts, { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = $("#file-save-link")[0];
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 500);
+}
+
+// Compact storage for page layouts to save localStorage space.
+// We store layouts as arrays in a fixed field order, which is smaller than object keys.
+const LAYOUT_FIELDS = ['page_rows','page_columns','back_bleed_width','back_bleed_height','page_zoom_width','page_zoom_height','page_zoom_keep_ratio','rounded_corners','card_size','page_size','page_width','page_height','card_arrangement'];
+
+function compressLayoutObj(layout) {
+    return LAYOUT_FIELDS.map(f => (typeof layout[f] !== 'undefined' ? layout[f] : null));
+}
+
+function decompressLayoutArr(arr) {
+    const obj = {};
+    for (let i = 0; i < LAYOUT_FIELDS.length; i++) {
+        const key = LAYOUT_FIELDS[i];
+        const val = arr[i];
+        if (typeof val !== 'undefined' && val !== null) {
+            if (key === 'page_zoom_keep_ratio' || key === 'rounded_corners') {
+                obj[key] = Boolean(val);
+            } else {
+                obj[key] = val;
+            }
+        }
+    }
+    return obj;
+}
+
+function compressLayoutsMap(layouts) {
+    const out = {};
+    if (!layouts) return out;
+    Object.keys(layouts).forEach(name => {
+        const v = layouts[name];
+        out[name] = Array.isArray(v) ? v : compressLayoutObj(v);
+    });
+    return out;
+}
+
+function decompressLayoutsMap(layouts) {
+    const out = {};
+    if (!layouts) return out;
+    Object.keys(layouts).forEach(name => {
+        const v = layouts[name];
+        out[name] = Array.isArray(v) ? decompressLayoutArr(v) : v;
+    });
+    return out;
+}
+
+function get_saved_layouts() {
+    try {
+        const raw = localStorage.getItem('page_layouts');
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return decompressLayoutsMap(parsed);
+    } catch (e) {
+        console.error('Error reading page_layouts from localStorage', e);
+        return {};
+    }
+}
+
+function write_saved_layouts(newLayouts) {
+    try {
+        // Accept either compressed (arrays) or full objects; always write compressed form
+        const compressed = compressLayoutsMap(newLayouts);
+        localStorage.setItem('page_layouts', JSON.stringify(compressed));
+        return true;
+    } catch (e) {
+        console.error('Error writing page_layouts', e);
+        return false;
+    }
+}
+
+// Backwards-compatible alias that merges into existing layouts (operates on decompressed objects)
+function merge_into_saved_layouts(newLayouts) {
+    const existing = get_saved_layouts();
+    const merged = { ...existing, ...newLayouts };
+    return write_saved_layouts(merged);
+}
+
+// Make these helpers global so they are callable from apply_config and other places
+function ui_set_default_tab_values(options) {
+    $("#default-icon-front").val(options.default_icon_front_container);
+    $("#default-icon-back").val(options.default_icon_back);
+    $("#default-icon-back-container").val(options.default_icon_back_container).trigger("change");
+    $("#default-title-size").val(options.default_title_size);
+    $("#default-card-font-size").val(options.default_card_font_size);
+    $("#default-card-background").val(options.default_background_image);
+}
+
+function ui_set_page_tab_values(options) {
+   $("#card-size").val(options.card_size).change();
+   $("#card-arrangement").val(options.card_arrangement).change();
+   $("#page-rows").val(options.page_rows).change();
+   $("#page-columns").val(options.page_columns).change();
+   $("#back-bleed-width").val(options.back_bleed_width).change();
+   $("#back-bleed-height").val(options.back_bleed_height).change();
+   $("#page-zoom-keep-ratio").prop('checked', app_settings.page_zoom_keep_ratio);
+   $("#page-zoom-width").val(options.page_zoom_width);
+   $("#page-zoom-height").val(options.page_zoom_height);
+   $("#card-zoom-width").val(options.card_zoom_width);
+   $("#card-zoom-height").val(options.card_zoom_height);
+   $("#rounded-corners").prop('checked', options.rounded_corners);
+}
+
+function apply_config(obj, importFileName) {
+    if (!obj || typeof obj !== 'object') return;
+
+    // If config contains card_options / app_settings we apply them (backwards-compatible)
+    if (obj.card_options) {
+        card_options = legacy_card_options(obj.card_options);
+    }
+    if (obj.app_settings) {
+        app_settings = legacy_app_settings(obj.app_settings);
+    }
+
+    // Helper to apply a single layout object to UI
+    function apply_layout_object(layout) {
+        if (!layout) return;
+        card_options.page_rows = layout.page_rows || card_options.page_rows;
+        card_options.page_columns = layout.page_columns || card_options.page_columns;
+        card_options.back_bleed_width = layout.back_bleed_width || card_options.back_bleed_width;
+        card_options.back_bleed_height = layout.back_bleed_height || card_options.back_bleed_height;
+        card_options.page_zoom_width = layout.page_zoom_width || card_options.page_zoom_width;
+        card_options.page_zoom_height = layout.page_zoom_height || card_options.page_zoom_height;
+        app_settings.page_zoom_keep_ratio = (typeof layout.page_zoom_keep_ratio !== 'undefined') ? Boolean(layout.page_zoom_keep_ratio) : app_settings.page_zoom_keep_ratio;
+        card_options.rounded_corners = (typeof layout.rounded_corners !== 'undefined') ? Boolean(layout.rounded_corners) : card_options.rounded_corners;
+        card_options.card_arrangement = layout.card_arrangement || card_options.card_arrangement;
+        // New saved fields
+        card_options.card_size = layout.card_size || card_options.card_size;
+        card_options.page_size = layout.page_size || card_options.page_size;
+        card_options.page_width = layout.page_width || card_options.page_width;
+        card_options.page_height = layout.page_height || card_options.page_height;
+    }
+
+    // Merge or interpret page_layouts if present
+    if (obj.page_layouts) {
+        // Normalize keys and overwrite existing saved layouts with imported set
+        const keys = Object.keys(obj.page_layouts);
+        const normalized = {};
+        keys.forEach(k => {
+            const layout = obj.page_layouts[k];
+            // Try to strip trailing ISO timestamp from provided key
+            const base = k.replace(/_[0-9]{4}-[0-9]{2}-[0-9]{2}T.*$/, '').replace(/\s+/g, '_');
+            const key = `${base}_${layout.page_rows || 'r'}x${layout.page_columns || 'c'}`;
+            normalized[key] = layout;
+        });
+        const ok = write_saved_layouts(normalized);
+        if (!ok) {
+            showToast('Erreur lors de la sauvegarde des mises en page importées.', 'danger');
+            return;
+        }
+        const normalizedKeys = Object.keys(normalized);
+        if (normalizedKeys.length === 1) {
+            // Auto-apply the single imported layout
+            apply_layout_object(normalized[normalizedKeys[0]]);
+            showToast('Mise en page «' + normalizedKeys[0] + '» importée et appliquée. (Anciennes sauvegardes remplacées)', 'success');
+        } else {
+            showToast(normalizedKeys.length + ' mises en page importées et ont remplacé les sauvegardes précédentes.', 'success');
+        }
+    } else if (obj.page_rows || obj.page_columns) {
+        // The file itself might be a single layout object (not wrapped). Normalize key from filename and include dimensions.
+        const rawName = importFileName ? importFileName.replace(/\.[^/.]+$/, '') : 'imported-layout';
+        // Strip trailing ISO timestamp-like suffix if present to keep keys short
+        const baseWithoutTs = rawName.replace(/_[0-9]{4}-[0-9]{2}-[0-9]{2}T.*$/, '').replace(/\s+/g, '_');
+        const layout = obj;
+        const key = `${baseWithoutTs}_${layout.page_rows || 'r'}x${layout.page_columns || 'c'}`;
+        // Overwrite saved layouts with this single imported layout under a normalized key
+        const ok = write_saved_layouts({ [key]: layout });
+        if (ok) {
+            apply_layout_object(layout);
+            showToast('Mise en page «' + key + '» importée et appliquée. (Anciennes sauvegardes remplacées)', 'success');
+        } else {
+            showToast('Erreur lors de l\'importation de la mise en page.', 'danger');
+        }
+    }
+
+    // Update UI to reflect new configuration
+    try {
+        ui_set_page_tab_values(card_options);
+        ui_set_default_tab_values(card_options);
+        $('#default-icon-front').val(card_options.default_icon_front);
+        $('#default-icon-back').val(card_options.default_icon_back);
+        $('#default-title-size').val(card_options.default_title_size);
+        $('#default-card-font-size').val(card_options.default_card_font_size);
+        local_store_save();
+        ui_render_selected_card();
+    } catch (e) {
+        console.error('Error applying UI updates after import', e);
+        try { showToast('La configuration a été importée mais la mise à jour de l\u2019interface a échoué.', 'warning'); } catch (ee) { console.debug('toast failed', ee); }
+    }
 }
 
 function ui_init_cards(data) {
@@ -1013,29 +1237,7 @@ $(document).ready(function () {
         }
     });
 
-    function ui_set_default_tab_values(options) {
-        $("#default-icon-front").val(options.default_icon_front_container);
-        $("#default-icon-back").val(options.default_icon_back);
-        $("#default-icon-back-container").val(options.default_icon_back_container).trigger("change");
-        $("#default-title-size").val(options.default_title_size);
-        $("#default-card-font-size").val(options.default_card_font_size);
-    	$("#default-card-background").val(options.default_background_image);
-    }
 
-    function ui_set_page_tab_values(options) {
-       $("#card-size").val(options.card_size).change();
-       $("#card-arrangement").val(options.card_arrangement).change();
-       $("#page-rows").val(options.page_rows).change();
-       $("#page-columns").val(options.page_columns).change();
-       $("#back-bleed-width").val(options.back_bleed_width).change();
-       $("#back-bleed-height").val(options.back_bleed_height).change();
-       $("#page-zoom-keep-ratio").prop('checked', app_settings.page_zoom_keep_ratio);
-       $("#page-zoom-width").val(options.page_zoom_width);
-       $("#page-zoom-height").val(options.page_zoom_height);
-       $("#card-zoom-width").val(options.card_zoom_width);
-       $("#card-zoom-height").val(options.card_zoom_height);
-       $("#rounded-corners").prop('checked', options.rounded_corners);
-    }
 
     function ui_reset_group_tab_values(group) {
         if (!confirm('Reset the current tab\'s value?')) return;
@@ -1059,6 +1261,103 @@ $(document).ready(function () {
     $('#default-icon-back').val(card_options.default_icon_back);
     $('#default-title-size').val(card_options.default_title_size);
     $('#default-card-font-size').val(card_options.default_card_font_size);
+
+    // Layout save/load helper functions are defined globally to be usable across modules.
+
+    function export_layout_file(name) {
+        if (!name) return false;
+        // full name (used for filename and as metadata)
+        const fullName = name;
+        // storage key: base name without timestamp + dimensions (keeps keys short)
+        const base = (app_settings.file_name || 'mise_en_page').toString().replace(/\s+/g, '_');
+        const storageKey = `${base}_${card_options.page_rows}x${card_options.page_columns}`;
+
+        const layout = {
+            page_rows: card_options.page_rows,
+            page_columns: card_options.page_columns,
+            back_bleed_width: card_options.back_bleed_width,
+            back_bleed_height: card_options.back_bleed_height,
+            page_zoom_width: card_options.page_zoom_width,
+            page_zoom_height: card_options.page_zoom_height,
+            page_zoom_keep_ratio: app_settings.page_zoom_keep_ratio,
+            rounded_corners: card_options.rounded_corners,
+            card_size: card_options.card_size,
+            page_size: card_options.page_size,
+            page_width: card_options.page_width,
+            page_height: card_options.page_height,
+            card_arrangement: card_options.card_arrangement,
+            // metadata for exported file readability
+            _export_name: fullName
+        };
+        // For exported files we use the short storageKey as the key (clean id) but the file remains human-readable
+        const payload = { page_layouts: { [storageKey]: layout } };
+        const jsonString = JSON.stringify(payload, null, "  ");
+        const filename = (fullName || 'layout') + '.json';
+        const parts = [jsonString];
+        const blob = new Blob(parts, { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = $("#file-save-link")[0];
+        a.href = url;
+        a.download = filename;
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 500);
+        // Overwrite local saved layouts with this single layout
+        write_saved_layouts(payload.page_layouts);
+        showToast('Mise en page «' + name + '» exportée et sauvegardée localement. (Anciennes sauvegardes supprimées)', 'success');
+        return true;
+    }
+
+    function ui_save_page_layout() {
+        // Auto-generate a name based on file name, dimensions and timestamp and export immediately
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const base = (app_settings.file_name || 'mise_en_page').toString().replace(/\s+/g, '_');
+        const name = `${base}_${card_options.page_rows}x${card_options.page_columns}_${timestamp}`;
+        export_layout_file(name);
+    }
+
+    function get_save_layout(name) {
+        if (!name) return null;
+        const layouts = get_saved_layouts();
+        return layouts[name] || null;
+    }
+
+    function ui_apply_saved_layout(name) {
+        const layout = get_save_layout(name);
+        if (!layout) {
+            showToast('Mise en page «' + name + '» introuvable.', 'danger');
+            return false;
+        }
+        // apply only the known layout fields
+        const fields = [
+            'page_rows','page_columns','back_bleed_width','back_bleed_height',
+            'page_zoom_width','page_zoom_height','page_zoom_keep_ratio',
+            'rounded_corners','card_arrangement'
+        ];
+        fields.forEach(f => {
+            if (typeof layout[f] !== 'undefined') {
+                if (f === 'page_zoom_keep_ratio') {
+                    app_settings.page_zoom_keep_ratio = Boolean(layout[f]);
+                } else {
+                    card_options[f] = layout[f];
+                }
+            }
+        });
+        // Update UI and persist
+        ui_set_page_tab_values(card_options);
+        ui_set_default_tab_values(card_options);
+        local_store_save();
+        showToast('Mise en page «' + name + '» appliquée.', 'success');
+        return true;
+    }
+
+    function ui_load_page_layout() {
+        // Always open file picker for config import; loader will merge and auto-apply a single imported layout
+        $("#file-load").attr({ 'data-config': '1' }).click();
+    }
+
+    // Bind buttons
+    $('#button-save-layout').click(ui_save_page_layout);
+    $('#button-load-layout').click(ui_load_page_layout);
 
     $('.icon-list').typeahead({
         source: icon_names,

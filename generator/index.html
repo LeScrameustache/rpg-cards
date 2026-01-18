@@ -58,16 +58,7 @@
 
 <body>
     <div class="container-fluid">
-        <!--<h1 class="page-header">RPG card generator</h1>-->
-        
-        <div class="row">
-            <div class="alert alert-danger alert-dismissible" role="alert">
-                <button type="button" class="close" data-dismiss="alert"><span aria-hidden="true">&times;</span><span
-                        class="sr-only">Close</span></button>
-                <strong>Important</strong>
-                October 1, 2025 — The app’s address may change in the coming months. Please make sure to save your cards as local files. Thank you!.
-            </div>
-        </div>
+        <h1 class="page-header">RPG card generator</h1>
         <div class="row">
             <div class="alert alert-warning alert-dismissible" role="alert">
                 <button type="button" class="close" data-dismiss="alert"><span aria-hidden="true">&times;</span><span
@@ -402,6 +393,7 @@
                                                 data-option="page_rows" value="3" min="1">
                                         </div>
                                     </div>
+
                                     <div class="form-group">
                                         <div class="col-sm-4 control-label"><label for="back-bleed-width">Bleed</label> <a href="javascript;" onclick="$('#bleed-info').toggle(); return false;">(?)</a></div>
                                         <div class="col-sm-8" style="display: flex;">
@@ -517,6 +509,12 @@
                                     <div class="form-group">
                                         <div class="col-sm-12">
                                             <button type="button" class="btn btn-default" style="width: 100%;" id="reset-page-tab-values">Restore this tab's default values</button>
+                                        </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <div class="col-sm-12" style="display:flex; gap:8px;">
+                                            <button type="button" class="btn btn-default" id="button-save-layout">Sauvegarder mise en page</button>
+                                            <button type="button" class="btn btn-default" id="button-load-layout">Charger mise en page</button>
                                         </div>
                                     </div>
                                     <div class="form-group">
